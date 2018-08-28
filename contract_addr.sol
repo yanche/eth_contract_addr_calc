@@ -1,24 +1,33 @@
 
 pragma solidity ^0.4.24;
 
-library ContractAddrCalc {
+library ContractAddrCalculator {
     // NOTE this program works as long as nonce is less than 33 bytes
     // which is 2**(8*33), almost impossible for a contract to create
-    // so many contracts
-    function calc() public view returns(uint256 addr) {
+    // so many contracts, also uint256 is only 32bytes
+    // GAS COST
+    // nonce = 1 => 256
+    //         0x80 => 389
+    //         0x0102 => 429
+    // above is example of assembly execution cost, plus 280 other execution cost per tx
+    // complaint: 1. the compiler's control flow analysis sucks
+    //            2. no opcode for left/right shift, has to use a combination of exp and mul, causes a lot more gas usage
+    function calc(address baseAddr, uint256 nonce) public view returns(address addr) {
         assembly {
             // ---------------START: genAddr---------------
             // TODO: load from parameters
             // A N
-0x4920ebe161687f4a2180a698171ff5bfb2fbac65
-1
+            baseAddr  /* dup3 */
+            nonce     /* dup3 */
 
                 // ---------------START: rlpEncodeNonce---------------
                 // N
                 dup1
+                dup1 /* to fix the compiler bug on stack height calc around "jump" opcode, have to manually maintain the stack height */
                 label_not0
-                // N N label_not0
+                // N N N label_not0
                 jumpi
+                pop
                 pop
                 0x80
                 1
@@ -27,20 +36,22 @@ library ContractAddrCalc {
                 // 0x80 1 label_rlpEnd
                 jump
                 label_not0:
-                // N
+                // N N
                 dup1
                 0x7f
                 lt
-                // N N>0x7f
+                // N N N>0x7f
                 label_rlpGt0x7f
                 jumpi
-                // N
+                // N N
+                pop
                 1
                 label_rlpEnd
                 // N 1 label_rlpEnd
                 jump
                 label_rlpGt0x7f:
-                // N
+                // N N
+                pop
 
                     // ---------------START: countStackTopInBytes---------------
                     // push the integer represents the byte count of stack-top number on to stak
@@ -149,7 +160,7 @@ library ContractAddrCalc {
             0xffffffffffffffffffffffffffffffffffffffff
             and
             // sha3_rlp(last 20bytes)
-           // =:addr equivalent to swap1 pop
+            =:addr  /* equivalent to swap1 pop */
             // ---------------END: genAddr---------------
         }
     }
